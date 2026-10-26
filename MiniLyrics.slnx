@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MiniLyrics.App/MiniLyrics.App.csproj" />
+    <Project Path="src/MiniLyrics.Core/MiniLyrics.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MiniLyrics.Tests/MiniLyrics.Tests.csproj" />
+  </Folder>
+</Solution>
