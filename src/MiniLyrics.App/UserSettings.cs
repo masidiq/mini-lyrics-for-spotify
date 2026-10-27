@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using MiniLyrics.Core;
 
 namespace MiniLyrics.App;
 
@@ -17,6 +18,9 @@ public sealed class UserSettings
     public bool TextOnly { get; set; } = true;
     public bool TextOnlyDefaultApplied { get; set; }
     public bool IgnoreMouseClicks { get; set; } = true;
+    public LyricTextMode TextMode { get; set; } = LyricTextMode.Latin;
+    public RomanizationLanguage RomanizationLanguage { get; set; }
+    public LyricScrollMode ScrollMode { get; set; } = LyricScrollMode.Continuous;
     public double CorrectionSeconds { get; set; }
     public static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniLyricsForSpotify");
     private static string SettingsPath => Path.Combine(DataDirectory, "settings.json");
@@ -38,6 +42,9 @@ public sealed class UserSettings
         settings.FontSize = Bound(settings.FontSize, 14, 36, 20);
         settings.Opacity = Bound(settings.Opacity, 0.35, 1, 0.96);
         settings.CorrectionSeconds = Bound(settings.CorrectionSeconds, -10, 10, 0);
+        if (!Enum.IsDefined(settings.TextMode)) settings.TextMode = LyricTextMode.Latin;
+        if (!Enum.IsDefined(settings.RomanizationLanguage)) settings.RomanizationLanguage = RomanizationLanguage.Automatic;
+        if (!Enum.IsDefined(settings.ScrollMode)) settings.ScrollMode = LyricScrollMode.Continuous;
         settings.Left = Bound(settings.Left, SystemParameters.VirtualScreenLeft,
             SystemParameters.VirtualScreenLeft + Math.Max(0, SystemParameters.VirtualScreenWidth - settings.Width), 80);
         settings.Top = Bound(settings.Top, SystemParameters.VirtualScreenTop,

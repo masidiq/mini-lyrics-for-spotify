@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.png binary
+# Preserve upstream license texts, including their original whitespace and line endings.
+licenses/** -text -whitespace
