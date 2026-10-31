@@ -8,6 +8,19 @@ void Check(bool condition, string name)
     Console.WriteLine("PASS: " + name); count++;
 }
 
+var visibility = new SpotifyVisibility();
+Check(visibility.Update(false, false, false) is null, "manual mode leaves visibility unchanged");
+Check(visibility.Update(true, false, false) == false, "automatic mode starts hidden without Spotify");
+Check(visibility.Update(true, false, false) is null, "idle polling preserves manual show");
+Check(visibility.Update(true, true, false) == true, "Spotify opening shows lyrics");
+Check(visibility.Update(true, true, false) is null, "polling preserves manual hide");
+Check(visibility.Update(true, false, true) is null, "Spotify closing keeps settings accessible");
+Check(visibility.Update(true, false, false) == false, "closing settings applies pending Spotify state");
+Check(visibility.Update(true, true, true) is null, "Spotify opening does not interrupt settings");
+Check(visibility.Update(true, true, false) == true, "Spotify reopening restores lyrics");
+Check(visibility.Update(false, false, false) is null, "disabling automatic mode preserves visibility");
+Check(visibility.Update(true, true, false) == true, "reenabling reevaluates Spotify state");
+
 var lines = LrcParser.Parse("[ar:Example]\n[offset:+100]\n[00:02.50][01:02.005]Second\n[00:01.1]First\n[bad]ignored\n[00:03.000]\n[00:99]invalid");
 Check(lines.Count == 4 && lines[0].Text == "First", "metadata ignored, multiple timestamps expanded and sorted");
 Check(lines[0].At == TimeSpan.FromSeconds(1.2) && lines[1].At == TimeSpan.FromSeconds(2.6)

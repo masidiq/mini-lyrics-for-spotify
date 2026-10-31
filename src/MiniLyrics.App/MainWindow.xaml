@@ -51,6 +51,8 @@
        <Button DockPanel.Dock="Right" Content="Selesai" Click="ToggleSettings" FontSize="11" />
        <TextBlock Text="Pengaturan" FontWeight="SemiBold" VerticalAlignment="Center" />
       </DockPanel>
+      <CheckBox x:Name="StartWithSpotifyCheck" Content="Mulai otomatis bersama Spotify" Foreground="#EFF5F0" Checked="StartupSettingChanged" Unchecked="StartupSettingChanged" />
+      <TextBlock Text="Berjalan di tray saat login Windows; lirik muncul saat Spotify dibuka dan tersembunyi saat ditutup. Simpan aplikasi di lokasi tetap." Foreground="{StaticResource Muted}" FontSize="10" Margin="0,5,0,8" TextWrapping="Wrap" />
       <CheckBox x:Name="TopmostCheck" Content="Selalu di atas aplikasi lain" Foreground="#EFF5F0" Checked="SettingChanged" Unchecked="SettingChanged" />
       <CheckBox x:Name="TextOnlyCheck" Content="Mode teks saja (tanpa panel)" Foreground="#EFF5F0" Margin="0,8,0,0" Checked="SettingChanged" Unchecked="SettingChanged" />
       <CheckBox x:Name="IgnoreMouseCheck" Content="Tembus klik (abaikan mouse)" Foreground="#EFF5F0" Margin="0,8,0,0" Checked="SettingChanged" Unchecked="SettingChanged" />

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.6 — 2026-10-28
+
+- Haluskan perpindahan highlight dengan transisi terang/redup, ketebalan, dan pembesaran baris aktif selama 280 ms pada panel dan overlay.
+- Besarkan baris aktif melalui render transform agar posisi layout baris sekitarnya tetap stabil; highlight awal langsung siap tanpa menunggu animasi.
+- Animasikan perubahan ukuran font dari Pengaturan/tray, termasuk saat ukuran diganti lagi sebelum transisi selesai.
+
+## v0.1.5 — 2026-10-28
+
+- Tambahkan opsi Mulai otomatis bersama Spotify di Pengaturan dan tray; default nonaktif.
+- Saat diaktifkan, jalankan Mini Lyrics di tray saat login Windows, tampilkan lirik saat Spotify dibuka, dan sembunyikan saat Spotify ditutup.
+- Pertahankan akses Pengaturan dan pilihan sembunyikan manual; nonaktifkan opsi untuk menghapus pendaftaran startup Windows.
+- Gunakan `artifacts/latest` untuk output publish dan `artifacts/latest/verification` untuk hasil verifikasi.
+
 ## v0.1.4 — 2026-10-27
 
 - Tampilkan highlight preview baris pertama sejak dimuat, termasuk sebelum window terlihat dan saat timestamp dimulai dari nol; cue `[Intro]`/`(Instrumental)` dilewati.

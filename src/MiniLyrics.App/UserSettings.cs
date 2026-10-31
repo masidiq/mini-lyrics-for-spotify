@@ -14,6 +14,7 @@ public sealed class UserSettings
     public double Height { get; set; } = 220;
     public double FontSize { get; set; } = 20;
     public double Opacity { get; set; } = 0.96;
+    public bool StartWithSpotify { get; set; }
     public bool AlwaysOnTop { get; set; } = true;
     public bool TextOnly { get; set; } = true;
     public bool TextOnlyDefaultApplied { get; set; }

@@ -27,6 +27,8 @@ public partial class MainWindow : Window
 {
     private readonly UserSettings settings = UserSettings.Load();
     private readonly SpotifySessionReader reader = new();
+    private readonly SpotifyProcessMonitor spotifyProcess = new();
+    private readonly SpotifyVisibility spotifyVisibility = new();
     private readonly PlaybackClock clock = new();
     private readonly HttpClient http = new() { BaseAddress = new Uri("https://lrclib.net/"), Timeout = TimeSpan.FromSeconds(15) };
     private readonly LyricsController lyrics;
@@ -38,6 +40,7 @@ public partial class MainWindow : Window
     private readonly Forms.ToolStripMenuItem textOnlyMenu;
     private readonly Forms.ToolStripMenuItem ignoreMouseMenu;
     private readonly Forms.ToolStripMenuItem topmostMenu;
+    private readonly Forms.ToolStripMenuItem startupMenu;
     private readonly Forms.ToolStripMenuItem fontMenu, opacityMenu, offsetMenu;
     private readonly Forms.NumericUpDown trayFont, trayOpacity, trayOffset;
     private readonly Forms.ToolStripMenuItem textModeMenu, languageMenu;
@@ -56,6 +59,8 @@ public partial class MainWindow : Window
     private readonly List<string> originalLyricTexts = [];
     private Track? currentTrack;
     private bool busy, ready, exiting, smokeTesting;
+    private bool fontSizeAnimating;
+    private long fontSizeAnimationUntil;
     private int activeIndex = -2;
     private int displayIndex = -1;
     private double? heightBeforeSettings;
@@ -63,8 +68,9 @@ public partial class MainWindow : Window
         "AnimatedTextOffset", typeof(double), typeof(MainWindow),
         new PropertyMetadata(0d, (owner, args) => ((MainWindow)owner).TextOnlyScroll.ScrollToVerticalOffset((double)args.NewValue)));
 
-    public MainWindow()
+    public MainWindow(bool smokeTest = false)
     {
+        smokeTesting = smokeTest;
         InitializeComponent();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("MiniLyricsForSpotify/1.0 (personal Windows desktop app)");
         lyrics = new LyricsController(new LrclibProvider(http, Path.Combine(UserSettings.DataDirectory, "cache")));
@@ -72,6 +78,7 @@ public partial class MainWindow : Window
         Left = settings.Left; Top = settings.Top; Width = settings.Width; Height = settings.Height;
         FontSlider.Value = settings.FontSize; OpacitySlider.Value = settings.Opacity;
         OffsetSlider.Value = settings.CorrectionSeconds; TopmostCheck.IsChecked = settings.AlwaysOnTop;
+        StartWithSpotifyCheck.IsChecked = settings.StartWithSpotify;
         TextOnlyCheck.IsChecked = settings.TextOnly; IgnoreMouseCheck.IsChecked = settings.IgnoreMouseClicks;
         TextModeCombo.SelectedIndex = (int)settings.TextMode;
         LanguageCombo.SelectedIndex = (int)settings.RomanizationLanguage;
@@ -100,6 +107,12 @@ public partial class MainWindow : Window
             if (!syncingSettings) TopmostCheck.IsChecked = topmostMenu.Checked;
         });
         menu.Items.Add(topmostMenu);
+        startupMenu = new Forms.ToolStripMenuItem("Mulai otomatis bersama Spotify") { CheckOnClick = true };
+        startupMenu.CheckedChanged += (_, _) => Dispatcher.Invoke(() =>
+        {
+            if (!syncingSettings) StartWithSpotifyCheck.IsChecked = startupMenu.Checked;
+        });
+        menu.Items.Add(startupMenu);
         (fontMenu, trayFont) = CreateTrayNumber(14, 36, 0, 1, value => FontSlider.Value = (double)value);
         (opacityMenu, trayOpacity) = CreateTrayNumber(35, 100, 0, 5, value => OpacitySlider.Value = (double)value / 100);
         (offsetMenu, trayOffset) = CreateTrayNumber(-10, 10, 2, 0.25m, value => OffsetSlider.Value = (double)value);
@@ -134,6 +147,50 @@ public partial class MainWindow : Window
         ApplyDisplayMode();
         mediaTimer.Start();
         lyricTimer.Start();
+        if (!smokeTesting && settings.StartWithSpotify && !StartupRegistration.TrySetEnabled(true, out var error))
+            SaveStatus.Text = error;
+    }
+
+    public void StartFollowingSpotify()
+    {
+        bool? visible = spotifyVisibility.Update(!smokeTesting && settings.StartWithSpotify, spotifyProcess.IsRunning(), false);
+        if (visible != false) Show();
+    }
+
+    private void UpdateSpotifyVisibility(bool running)
+    {
+        bool? visible = spotifyVisibility.Update(settings.StartWithSpotify, running, SettingsPanel.Visibility == Visibility.Visible);
+        if (visible == true) ShowPanel();
+        else if (visible == false) { PersistSettings(); Hide(); }
+    }
+
+    private void StartupSettingChanged(object sender, RoutedEventArgs e)
+    {
+        if (!ready || syncingSettings) return;
+        bool enabled = StartWithSpotifyCheck.IsChecked == true;
+        bool previous = settings.StartWithSpotify;
+        string error = "";
+        bool registered = smokeTesting || StartupRegistration.TrySetEnabled(enabled, out error);
+        if (registered)
+        {
+            settings.StartWithSpotify = enabled;
+            if (!smokeTesting && !settings.Save())
+            {
+                settings.StartWithSpotify = previous;
+                StartupRegistration.TrySetEnabled(previous, out _);
+                error = "Pengaturan belum tersimpan. Periksa izin folder data lokal.";
+            }
+        }
+        if (!registered || settings.StartWithSpotify != enabled)
+        {
+            syncingSettings = true;
+            try { StartWithSpotifyCheck.IsChecked = previous; }
+            finally { syncingSettings = false; }
+            MessageBox.Show(error, "Mini Lyrics", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        SyncTraySettings();
+        if (!settings.StartWithSpotify) spotifyVisibility.Update(false, false, false);
+        if (!smokeTesting) UpdateSpotifyVisibility(spotifyProcess.IsRunning());
     }
 
     private async Task PollMedia()
@@ -142,6 +199,7 @@ public partial class MainWindow : Window
         busy = true;
         try
         {
+            UpdateSpotifyVisibility(spotifyProcess.IsRunning());
             var snapshot = await reader.ReadAsync();
             if (exiting) return;
             if (snapshot is null)
@@ -275,19 +333,21 @@ public partial class MainWindow : Window
         var block = new TextBlock
         {
             Text = text, FontSize = settings.FontSize, TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 10), Foreground = new SolidColorBrush(plain ? Color.FromRgb(220, 231, 224) : Color.FromRgb(137, 157, 145)),
+            Margin = new Thickness(8, 0, 8, 10), Foreground = new SolidColorBrush(plain ? Color.FromRgb(220, 231, 224) : Color.FromRgb(137, 157, 145)),
             FontWeight = FontWeights.Medium
         };
+        LyricHighlight.Initialize(block, false);
         lyricBlocks.Add(block);
         LyricsPanel.Children.Add(block);
         var overlayBlock = new TextBlock
         {
             Text = text, FontSize = settings.FontSize, TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 14),
+            TextAlignment = TextAlignment.Center, Margin = new Thickness(8, 0, 8, 14),
             Foreground = new SolidColorBrush(Color.FromRgb(255, 224, 102)),
             FontWeight = plain ? FontWeights.SemiBold : FontWeights.Medium, Opacity = plain ? 1 : 0.5,
             Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 6, ShadowDepth = 2, Opacity = 1 }
         };
+        LyricHighlight.Initialize(overlayBlock, true);
         textOnlyBlocks.Add(overlayBlock);
         TextOnlyPanel.Children.Add(overlayBlock);
     }
@@ -303,12 +363,11 @@ public partial class MainWindow : Window
         activeIndex = index;
         displayIndex = nextDisplayIndex;
         TextOnlyText.Text = displayIndex >= 0 ? lyricBlocks[displayIndex].Text : "♪";
+        bool animateHighlight = previousDisplayIndex >= 0 && IsVisible;
         for (int i = 0; i < lyricBlocks.Count; i++)
         {
-            lyricBlocks[i].Foreground = new SolidColorBrush(i == displayIndex ? Color.FromRgb(103, 232, 160) : Color.FromRgb(137, 157, 145));
-            lyricBlocks[i].FontWeight = i == displayIndex ? FontWeights.Bold : FontWeights.Normal;
-            textOnlyBlocks[i].Opacity = i == displayIndex ? 1 : 0.4;
-            textOnlyBlocks[i].FontWeight = i == displayIndex ? FontWeights.Bold : FontWeights.Normal;
+            LyricHighlight.SetActive(lyricBlocks[i], i == displayIndex, animateHighlight);
+            LyricHighlight.SetActive(textOnlyBlocks[i], i == displayIndex, animateHighlight);
         }
         if (displayIndex >= 0)
         {
@@ -355,7 +414,13 @@ public partial class MainWindow : Window
 
     private void OnAnimationFrame(object? sender, EventArgs e)
     {
-        if (!smokeTesting && !exiting && IsVisible && settings.ScrollMode == LyricScrollMode.Continuous && lines.Count > 0)
+        if (smokeTesting || exiting || !IsVisible) return;
+        if (fontSizeAnimating)
+        {
+            CenterTextOnlyLine(false);
+            fontSizeAnimating = Environment.TickCount64 < fontSizeAnimationUntil;
+        }
+        else if (settings.ScrollMode == LyricScrollMode.Continuous && lines.Count > 0)
             ScrollContinuously();
     }
 
@@ -397,6 +462,7 @@ public partial class MainWindow : Window
         settings.TextMode = (LyricTextMode)Math.Max(0, TextModeCombo.SelectedIndex);
         settings.RomanizationLanguage = (RomanizationLanguage)Math.Max(0, LanguageCombo.SelectedIndex);
         settings.ScrollMode = (LyricScrollMode)Math.Max(0, ScrollModeCombo.SelectedIndex);
+        bool fontSizeChanged = settings.FontSize != FontSlider.Value;
         settings.FontSize = FontSlider.Value;
         settings.Opacity = OpacitySlider.Value;
         settings.CorrectionSeconds = OffsetSlider.Value;
@@ -408,9 +474,15 @@ public partial class MainWindow : Window
         FontLabel.Text = $"Ukuran lirik · {settings.FontSize:0} px";
         OpacityLabel.Text = $"Opasitas · {settings.Opacity:P0}";
         OffsetLabel.Text = $"Koreksi waktu · {settings.CorrectionSeconds:+0.00;-0.00;0.00} dtk";
-        foreach (var block in lyricBlocks) block.FontSize = settings.FontSize;
-        foreach (var block in textOnlyBlocks) block.FontSize = settings.FontSize;
-        TextOnlyText.FontSize = settings.FontSize;
+        bool animateFontSize = IsVisible;
+        foreach (var block in lyricBlocks) LyricHighlight.SetFontSize(block, settings.FontSize, animateFontSize);
+        foreach (var block in textOnlyBlocks) LyricHighlight.SetFontSize(block, settings.FontSize, animateFontSize);
+        LyricHighlight.SetFontSize(TextOnlyText, settings.FontSize, animateFontSize);
+        if (fontSizeChanged && animateFontSize)
+        {
+            fontSizeAnimating = true;
+            fontSizeAnimationUntil = Environment.TickCount64 + LyricHighlight.DurationMilliseconds;
+        }
         activeIndex = -2;
         UpdateHighlight();
         CenterTextOnlyLine(false);
@@ -459,6 +531,7 @@ public partial class MainWindow : Window
             textOnlyMenu.Checked = settings.TextOnly;
             ignoreMouseMenu.Checked = settings.IgnoreMouseClicks;
             topmostMenu.Checked = settings.AlwaysOnTop;
+            startupMenu.Checked = settings.StartWithSpotify;
             trayFont.Value = (decimal)settings.FontSize;
             trayOpacity.Value = (decimal)(settings.Opacity * 100);
             trayOffset.Value = (decimal)settings.CorrectionSeconds;
@@ -528,6 +601,7 @@ public partial class MainWindow : Window
             PersistSettings();
         }
         ApplyDisplayMode();
+        if (!smokeTesting) UpdateSpotifyVisibility(spotifyProcess.IsRunning());
     }
     private void DragHeader(object sender, MouseButtonEventArgs e)
     {
@@ -682,6 +756,33 @@ public partial class MainWindow : Window
             UpdateHighlight();
             await Task.Delay(500);
             Capture(Path.Combine(outputDirectory, "text-only.png"));
+            double lineHeightBeforeHighlight = textOnlyBlocks[2].ActualHeight;
+            clock.Update(TimeSpan.FromSeconds(12), DateTimeOffset.UtcNow, false, TimeSpan.FromSeconds(180), 1, DateTimeOffset.UtcNow);
+            UpdateHighlight();
+            await Task.Delay(100);
+            var growingScale = (ScaleTransform)textOnlyBlocks[2].RenderTransform;
+            results["highlightHasIntermediateBrightnessAndSize"] = textOnlyBlocks[2].Opacity > 0.4 && textOnlyBlocks[2].Opacity < 1
+                && growingScale.ScaleX > 1 && growingScale.ScaleX < 1.06
+                && textOnlyBlocks[1].Opacity > 0.4 && textOnlyBlocks[1].Opacity < 1;
+            results["panelHighlightHasIntermediateColor"] = lyricBlocks[2].Foreground is SolidColorBrush animatedBrush
+                && animatedBrush.Color != Color.FromRgb(137, 157, 145) && animatedBrush.Color != Color.FromRgb(103, 232, 160);
+            results["highlightKeepsLayoutHeightStable"] = Math.Abs(textOnlyBlocks[2].ActualHeight - lineHeightBeforeHighlight) < 0.1;
+            Capture(Path.Combine(outputDirectory, "highlight-transition.png"));
+            double opacityBeforeReverse = textOnlyBlocks[2].Opacity;
+            clock.Update(TimeSpan.FromSeconds(7), DateTimeOffset.UtcNow, false, TimeSpan.FromSeconds(180), 1, DateTimeOffset.UtcNow);
+            UpdateHighlight();
+            results["highlightRapidSeekStartsFromCurrentAppearance"] = Math.Abs(textOnlyBlocks[2].Opacity - opacityBeforeReverse) < 0.05;
+            await Task.Delay(400);
+            results["highlightSettlesAfterRapidSeek"] = textOnlyBlocks[1].Opacity == 1 && textOnlyBlocks[2].Opacity == 0.4
+                && Math.Abs(((ScaleTransform)textOnlyBlocks[1].RenderTransform).ScaleX - 1.06) < 0.0001;
+            FontSlider.Value = 28;
+            await Task.Delay(100);
+            results["fontSizeHasIntermediateValue"] = textOnlyBlocks[1].FontSize > 20 && textOnlyBlocks[1].FontSize < 28;
+            FontSlider.Value = 24;
+            await Task.Delay(400);
+            results["fontSizeSettlesAfterRapidChanges"] = textOnlyBlocks[1].FontSize == 24 && lyricBlocks[1].FontSize == 24;
+            FontSlider.Value = 20;
+            await Task.Delay(400);
             var transparentBitmap = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
             transparentBitmap.Render(this);
             var corner = new byte[4];
@@ -846,21 +947,44 @@ public partial class MainWindow : Window
                 && SettingsPanel.Visibility == Visibility.Visible && PanelSurface.Visibility == Visibility.Visible;
             ignoreMouseMenu.Checked = true;
             results["trayModesSyncToPanel"] = IgnoreMouseCheck.IsChecked == true && !MousePassthrough.IsEnabled(nativeWindow);
+            StartWithSpotifyCheck.IsChecked = true;
+            results["startupPanelSyncsToTray"] = settings.StartWithSpotify && startupMenu.Checked;
+            UpdateSpotifyVisibility(false);
+            results["startupKeepsSettingsAccessible"] = IsVisible;
             Capture(Path.Combine(outputDirectory, "settings.png"));
             ToggleSettings(this, new RoutedEventArgs());
             results["settingsRestoreClickThrough"] = MousePassthrough.IsEnabled(nativeWindow);
             results["settingsRestoresCompactHeight"] = Height == 220;
+            spotifyVisibility.Update(false, false, false);
+            UpdateSpotifyVisibility(false);
+            results["startupWaitsInTray"] = !IsVisible && tray.Visible;
+            UpdateSpotifyVisibility(true);
+            results["startupShowsWithSpotify"] = IsVisible;
+            Hide();
+            UpdateSpotifyVisibility(true);
+            results["startupRespectsManualHide"] = !IsVisible;
+            UpdateSpotifyVisibility(false);
+            UpdateSpotifyVisibility(true);
+            results["startupShowsAfterSpotifyReopens"] = IsVisible;
+            UpdateSpotifyVisibility(false);
+            results["startupHidesAfterSpotifyCloses"] = !IsVisible;
+            startupMenu.Checked = false;
+            results["startupTraySyncsToPanel"] = !settings.StartWithSpotify && StartWithSpotifyCheck.IsChecked == false;
+            ShowPanel();
+            results["startupCommandQuotesPath"] = StartupRegistration.Command(@"C:\Apps With Spaces\MiniLyrics.exe") == "\"C:\\Apps With Spaces\\MiniLyrics.exe\" --background";
             var settingsPath = Path.Combine(outputDirectory, "test-settings.json");
             var saved = new UserSettings { FontSize = 28, Opacity = 0.65, AlwaysOnTop = false, TextOnly = true, CorrectionSeconds = -2.5, Width = 480, Height = 260,
-                TextMode = LyricTextMode.LatinAndOriginal, RomanizationLanguage = RomanizationLanguage.Japanese };
+                StartWithSpotify = true, TextMode = LyricTextMode.LatinAndOriginal, RomanizationLanguage = RomanizationLanguage.Japanese };
             results["settingsSaved"] = saved.Save(settingsPath);
             var reloaded = UserSettings.Load(settingsPath);
             results["settingsRoundTrip"] = reloaded.FontSize == 28 && reloaded.Opacity == 0.65 && !reloaded.AlwaysOnTop
                 && reloaded.TextOnly && reloaded.IgnoreMouseClicks && reloaded.CorrectionSeconds == -2.5 && reloaded.Width == 480 && reloaded.Height == 260;
             results["romanizationSettingsPersist"] = reloaded.TextMode == LyricTextMode.LatinAndOriginal && reloaded.RomanizationLanguage == RomanizationLanguage.Japanese;
+            results["startupSettingPersists"] = reloaded.StartWithSpotify;
             results["scrollModePersists"] = reloaded.ScrollMode == LyricScrollMode.Continuous;
             File.WriteAllText(settingsPath, "invalid json");
             results["settingsCorruptionRecovery"] = UserSettings.Load(settingsPath).FontSize == 20;
+            results["startupDefaultsOff"] = !UserSettings.Load(settingsPath).StartWithSpotify;
             File.WriteAllText(settingsPath, "{\"TextOnly\":false,\"FontSize\":26}");
             var upgraded = UserSettings.Load(settingsPath);
             results["oldSettingsStartWithoutPanel"] = upgraded.TextOnly && upgraded.TextOnlyDefaultApplied && upgraded.FontSize == 26;

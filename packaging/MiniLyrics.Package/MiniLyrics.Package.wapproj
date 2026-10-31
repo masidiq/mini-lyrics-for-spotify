@@ -1,0 +1,41 @@
+<Project>
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\Microsoft.DesktopBridge.props" />
+  <PropertyGroup>
+    <ProjectGuid>{A9ACED16-EB18-4692-8E6E-022B53012371}</ProjectGuid>
+    <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <DefaultLanguage>id-ID</DefaultLanguage>
+    <EntryPointProjectUniqueName>..\..\src\MiniLyrics.App\MiniLyrics.App.csproj</EntryPointProjectUniqueName>
+    <AppxPackage>true</AppxPackage>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint></PackageCertificateThumbprint>
+    <AppxPackageDir>$(MSBuildThisFileDirectory)..\..\artifacts\latest\</AppxPackageDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <ProjectReference Include="..\..\src\MiniLyrics.App\MiniLyrics.App.csproj">
+      <TrustLevel>FullTrust</TrustLevel>
+    </ProjectReference>
+    <Content Include="Assets\**\*">
+      <Link>Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <TargetPath>Assets\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="..\..\artifacts\latest\THIRD-PARTY-NOTICES.md">
+      <Link>THIRD-PARTY-NOTICES.md</Link>
+      <TargetPath>THIRD-PARTY-NOTICES.md</TargetPath>
+    </Content>
+    <Content Include="..\..\artifacts\latest\licenses\**\*">
+      <Link>licenses\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <TargetPath>licenses\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="..\..\PRIVACY.md">
+      <Link>PRIVACY.md</Link>
+      <TargetPath>PRIVACY.md</TargetPath>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\Microsoft.DesktopBridge.targets" />
+</Project>
