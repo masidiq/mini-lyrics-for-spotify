@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7 — 2026-10-31
+
+- Naikkan versi paket Microsoft Store untuk resubmission dengan build terbaru dan kebijakan privasi yang sudah tersedia publik.
+
 ## v0.1.6 — 2026-10-28
 
 - Haluskan perpindahan highlight dengan transisi terang/redup, ketebalan, dan pembesaran baris aktif selama 280 ms pada panel dan overlay.

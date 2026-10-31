@@ -6,7 +6,7 @@
          IgnorableNamespaces="uap desktop rescap">
   <Identity Name="19108TheRusun.MiniLyricsforSpotifyDesktop"
             Publisher="CN=A13B6398-8001-4158-A92C-2EA07BE0669D"
-            Version="0.1.6.0"
+            Version="0.1.7.0"
             ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>Mini Lyrics for Spotify Desktop</DisplayName>
